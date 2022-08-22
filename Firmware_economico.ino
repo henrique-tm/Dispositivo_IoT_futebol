@@ -136,6 +136,9 @@ void checkMPU(int mpu_addr){
 void setSleepOff(){
   writeRegMPU(PWR_MGMT_1, 0); // escreve 0 no registro de gerenciamento de energia(0x68), colocando o sensor em o modo ACTIVE}
 }
+void setSleepOn(){
+  writeRegMPU(PWR_MGMT_1, 1); // escreve 0 no registro de gerenciamento de energia(0x68), colocando o sensor em o modo ACTIVE}
+}
 void setAccelScale(){
   writeRegMPU(ACCEL_CONFIG, 0);
 }
@@ -159,7 +162,11 @@ void readRawMPU(){
   AcZ2 = AcZ;
   digitalWrite(LED_BUILTIN, led_state);         // pisca LED do NodeMCU a cada leitura do sensor                                       
 }
-
+void startMPU(){
+  initI2C();
+  initMPU();
+  checkMPU(MPU_ADDR);
+)
 //BPM
 void Batimento(){
   for(cont=0;cont<10;cont++){
@@ -218,11 +225,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.println("Iniciando configuração rede");
   setupWIFI(); 
-  MQTT.setServer(MQTT_SERVER, 1883);
   Serial.println("configurando sensores");
-  initI2C();
-  initMPU();
-  checkMPU(MPU_ADDR);
   SerialGPS.begin(GPSBaud, SERIAL_8N1, TXPin, RXPin);
   delay(200);
 }
@@ -230,13 +233,11 @@ void setup() {
 void loop() {
   while (SerialGPS.available() > 0) {
     if (gps.encode(SerialGPS.read())){
-      if (!MQTT.connected()) {
-        reconectar();//conecta o controlador a rede em caso de queda 
-      }
-      MQTT.loop();
       Serial.print("Valores publicados: ");
       Batimento();
+      startMPU();
       readRawMPU();
+      setSleepOn();
       displayInfo();
       doc["Dia"] = calendario;
       doc["Tempo"] = millis()/1000;
@@ -250,6 +251,11 @@ void loop() {
       serializeJson(doc, Serial);
       Serial.println(" ");
       serializeJson(doc, msgmqtt);
+      MQTT.setServer(MQTT_SERVER, 1883);
+      if (!MQTT.connected()) {
+        reconectar();//conecta o controlador a rede em caso de queda 
+      }
+      MQTT.loop();
       MQTT.publish("PlayerData", msgmqtt);
     }
   }
